@@ -11,9 +11,6 @@
     <!-- ArcGIS JavaScript API CSS -->
     <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
     
-    <!-- PapaParse for CSV loading - FIXED URL -->
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-    
     <style>
         * {
             margin: 0;
@@ -54,7 +51,6 @@
             font-size: 16px;
         }
 
-        /* Filters */
         .filters {
             background: #f8f9fa;
             padding: 20px;
@@ -110,7 +106,6 @@
             transform: translateY(-2px);
         }
 
-        /* Dashboard Grid */
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
@@ -147,7 +142,6 @@
             min-height: 350px;
         }
 
-        /* Map Section */
         .map-section {
             background: white;
             border: 2px solid #e0e0e0;
@@ -170,7 +164,6 @@
             overflow: hidden;
         }
 
-        /* Statistics Summary */
         .stats-summary {
             background: #f8f9fa;
             border-radius: 10px;
@@ -213,7 +206,6 @@
             opacity: 0.9;
         }
 
-        /* Loading Spinner */
         #loading {
             position: fixed;
             top: 0;
@@ -236,25 +228,6 @@
             color: #667eea;
         }
 
-        /* Tooltips */
-        .tooltip {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 6px;
-            font-size: 12px;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s;
-            z-index: 1000;
-        }
-
-        .tooltip.show {
-            opacity: 1;
-        }
-
-        /* Responsive */
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -273,13 +246,11 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <header>
             <h1>🏥 Healthcare Visual Analytics Dashboard</h1>
             <p>Interactive analysis of patient data, test results, and hospital statistics</p>
         </header>
 
-        <!-- Filters Section -->
         <div class="filters">
             <h3>📊 Filters</h3>
             <label>Hospital:
@@ -306,40 +277,33 @@
             <button id="resetBtn">Reset Filters</button>
         </div>
 
-        <!-- Main Dashboard Grid -->
         <div class="dashboard-grid">
-            <!-- Chart 1: Test Results Distribution -->
             <div class="chart-container">
                 <h3>Test Results Distribution</h3>
                 <div id="testResultsChart"></div>
             </div>
 
-            <!-- Chart 2: Medical Conditions vs Test Results -->
             <div class="chart-container">
                 <h3>Medical Conditions vs Test Results</h3>
                 <div id="conditionsChart"></div>
             </div>
 
-            <!-- Chart 3: Billing Amount Analysis -->
             <div class="chart-container">
                 <h3>Billing Amount Distribution</h3>
                 <div id="billingChart"></div>
             </div>
 
-            <!-- Chart 4: Patient Demographics -->
             <div class="chart-container">
                 <h3>Patient Demographics (Age Groups)</h3>
                 <div id="demographicsChart"></div>
             </div>
         </div>
 
-        <!-- Map Section -->
         <div class="map-section">
             <h3>🗺️ Hospital Geographic Distribution</h3>
             <div id="mapDiv"></div>
         </div>
 
-        <!-- Statistics Summary -->
         <div class="stats-summary">
             <h3>📈 Summary Statistics</h3>
             <div id="statsContainer">
@@ -354,7 +318,7 @@
                 <div class="stat-card">
                     <div class="stat-value" id="avgStay">-</div>
                     <div class="stat-label">Avg Stay (days)</div>
-                </div>
+                    </div>
                 <div class="stat-card">
                     <div class="stat-value" id="totalHospitals">-</div>
                     <div class="stat-label">Hospitals</div>
@@ -363,19 +327,431 @@
         </div>
     </div>
 
-    <!-- Loading indicator -->
     <div id="loading" style="display: none;">
         <div class="spinner">Loading data...</div>
     </div>
 
-    <!-- JavaScript Files - ORDER MATTERS! -->
-    <script src="js/dataPreprocessing.js"></script>
-    <script src="js/d3Visualizations.js"></script>
-    
-    <!-- Load ArcGIS AFTER other scripts -->
-    <script src="https://js.arcgis.com/4.28/"></script>
-    <script src="js/arcgisMap.js"></script>
-    <script src="healthcare_analytics/js/main.js"></script>
-</body>
+    <script>
+    // ========== DATA PREPROCESSING ==========
+    let globalData = [];
+    let filteredData = [];
 
+    function preprocessData(rawData) {
+        console.log('🔄 Starting data preprocessing...');
+        
+        let cleanedData = rawData.filter(d => {
+            return d['Test Results'] && d.Age && d.Hospital && d['Medical Condition'] &&
+                   d['Date of Admission'] && d['Discharge Date'];
+        });
+        
+        console.log(`✅ Removed ${rawData.length - cleanedData.length} rows with missing values`);
+        
+        cleanedData.forEach(d => {
+            d.Age = parseInt(d.Age) || 0;
+            d['Billing Amount'] = parseFloat(d['Billing Amount']) || 0;
+            d.Gender = d.Gender || 'Unknown';
+            d['Blood Type'] = d['Blood Type'] || 'Unknown';
+            d.Medication = d.Medication || 'None';
+            
+            let admission = new Date(d['Date of Admission']);
+            let discharge = new Date(d['Discharge Date']);
+            d.LengthOfStay = Math.max(1, Math.ceil((discharge - admission) / (1000 * 60 * 60 * 24)));
+            
+            let age = d.Age;
+            if (age <= 18) d.AgeGroup = '0-18';
+            else if (age <= 40) d.AgeGroup = '19-40';
+            else if (age <= 65) d.AgeGroup = '41-65';
+            else d.AgeGroup = '65+';
+            
+            d['Test Results'] = d['Test Results'].trim();
+        });
+        
+        console.log('✅ Data preprocessing complete!');
+        return cleanedData;
+    }
+
+    // ========== D3 VISUALIZATIONS ==========
+    const testResultColors = {
+        'Normal': '#4CAF50',
+        'Abnormal': '#F44336',
+        'Inconclusive': '#FF9800'
+    };
+
+    function createTestResultsChart(data) {
+        d3.select('#testResultsChart').html('');
+        
+        let counts = d3.rollup(data, v => v.length, d => d['Test Results']);
+        let chartData = Array.from(counts, ([key, value]) => ({ label: key, value: value }));
+        
+        const width = 450, height = 350, radius = Math.min(width, height) / 2 - 40;
+        
+        const svg = d3.select('#testResultsChart')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .append('g')
+            .attr('transform', `translate(${width/2}, ${height/2})`);
+        
+        const pie = d3.pie().value(d => d.value);
+        const arc = d3.arc().innerRadius(0).outerRadius(radius);
+        const arcHover = d3.arc().innerRadius(0).outerRadius(radius + 10);
+        
+        svg.selectAll('path')
+            .data(pie(chartData))
+            .enter()
+            .append('path')
+            .attr('d', arc)
+            .attr('fill', d => testResultColors[d.data.label])
+            .attr('stroke', 'white')
+            .attr('stroke-width', 2)
+            .style('cursor', 'pointer')
+            .on('mouseover', function(event, d) {
+                d3.select(this).transition().duration(200).attr('d', arcHover);
+            })
+            .on('mouseout', function() {
+                d3.select(this).transition().duration(200).attr('d', arc);
+            });
+        
+        svg.selectAll('text')
+            .data(pie(chartData))
+            .enter()
+            .append('text')
+            .attr('transform', d => `translate(${arc.centroid(d)})`)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '14px')
+            .attr('font-weight', 'bold')
+            .attr('fill', 'white')
+            .text(d => d.data.label);
+    }
+
+    function createConditionsChart(data) {
+        d3.select('#conditionsChart').html('');
+        
+        let grouped = d3.rollup(data, v => v.length, d => d['Medical Condition'], d => d['Test Results']);
+        
+        let chartData = [];
+        grouped.forEach((testResults, condition) => {
+            let obj = { condition: condition };
+            testResults.forEach((count, result) => {
+                obj[result] = count;
+            });
+            chartData.push(obj);
+        });
+        
+        chartData.sort((a, b) => {
+            let totalA = (a.Normal || 0) + (a.Abnormal || 0) + (a.Inconclusive || 0);
+            let totalB = (b.Normal || 0) + (b.Abnormal || 0) + (b.Inconclusive || 0);
+            return totalB - totalA;
+        });
+        
+        chartData = chartData.slice(0, 10);
+        
+        const margin = { top: 20, right: 120, bottom: 80, left: 60 };
+        const width = 500 - margin.left - margin.right;
+        const height = 350 - margin.top - margin.bottom;
+        
+        const svg = d3.select('#conditionsChart')
+            .append('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+        
+        const x0 = d3.scaleBand().domain(chartData.map(d => d.condition)).rangeRound([0, width]).paddingInner(0.1);
+        const x1 = d3.scaleBand().domain(['Normal', 'Abnormal', 'Inconclusive']).rangeRound([0, x0.bandwidth()]).padding(0.05);
+        const y = d3.scaleLinear().domain([0, d3.max(chartData, d => Math.max(d.Normal || 0, d.Abnormal || 0, d.Inconclusive || 0))]).nice().range([height, 0]);
+        
+        svg.append('g').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x0))
+            .selectAll('text').attr('transform', 'rotate(-45)').style('text-anchor', 'end').attr('font-size', '10px');
+        
+        svg.append('g').call(d3.axisLeft(y));
+        
+        const conditions = svg.selectAll('.condition').data(chartData).enter().append('g')
+            .attr('transform', d => `translate(${x0(d.condition)},0)`);
+        
+        ['Normal', 'Abnormal', 'Inconclusive'].forEach(result => {
+            conditions.append('rect')
+                .attr('x', x1(result))
+                .attr('y', d => y(d[result] || 0))
+                .attr('width', x1.bandwidth())
+                .attr('height', d => height - y(d[result] || 0))
+                .attr('fill', testResultColors[result]);
+        });
+        
+        const legend = svg.append('g').attr('transform', `translate(${width + 10}, 0)`);
+        ['Normal', 'Abnormal', 'Inconclusive'].forEach((result, i) => {
+            legend.append('rect').attr('x', 0).attr('y', i * 25).attr('width', 15).attr('height', 15).attr('fill', testResultColors[result]);
+            legend.append('text').attr('x', 20).attr('y', i * 25 + 12).text(result).attr('font-size', '12px');
+        });
+    }
+
+    function createBillingChart(data) {
+        d3.select('#billingChart').html('');
+        
+        const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+        const width = 500 - margin.left - margin.right;
+        const height = 350 - margin.top - margin.bottom;
+        
+        const svg = d3.select('#billingChart')
+            .append('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+        
+        const billingData = data.map(d => d['Billing Amount']);
+        const histogram = d3.histogram().value(d => d).domain([0, d3.max(billingData)]).thresholds(20);
+        const bins = histogram(billingData);
+        
+        const x = d3.scaleLinear().domain([0, d3.max(billingData)]).range([0, width]);
+        const y = d3.scaleLinear().domain([0, d3.max(bins, d => d.length)]).nice().range([height, 0]);
+        
+        svg.append('g').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).tickFormat(d => '$' + d.toLocaleString()))
+            .selectAll('text').attr('transform', 'rotate(-45)').style('text-anchor', 'end');
+        
+        svg.append('g').call(d3.axisLeft(y));
+        
+        svg.selectAll('rect').data(bins).enter().append('rect')
+            .attr('x', d => x(d.x0) + 1)
+            .attr('y', d => y(d.length))
+            .attr('width', d => Math.max(0, x(d.x1) - x(d.x0) - 2))
+            .attr('height', d => height - y(d.length))
+            .attr('fill', '#667eea')
+            .attr('stroke', 'white');
+    }
+
+    function createDemographicsChart(data) {
+        d3.select('#demographicsChart').html('');
+        
+        const grouped = d3.rollup(data, v => v.length, d => d.AgeGroup, d => d.Gender);
+        const ageGroups = ['0-18', '19-40', '41-65', '65+'];
+        const chartData = ageGroups.map(ageGroup => {
+            const genderData = grouped.get(ageGroup) || new Map();
+            return {
+                ageGroup: ageGroup,
+                Male: -(genderData.get('Male') || 0),
+                Female: genderData.get('Female') || 0
+            };
+        });
+        
+        const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+        const width = 500 - margin.left - margin.right;
+        const height = 350 - margin.top - margin.bottom;
+        
+        const svg = d3.select('#demographicsChart')
+            .append('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+        
+        const x = d3.scaleLinear().domain([d3.min(chartData, d => d.Male), d3.max(chartData, d => d.Female)]).range([0, width]);
+        const y = d3.scaleBand().domain(ageGroups).range([0, height]).padding(0.2);
+        
+        svg.append('g').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).tickFormat(d => Math.abs(d)));
+        svg.append('g').attr('transform', `translate(${x(0)},0)`).call(d3.axisLeft(y));
+        
+        svg.selectAll('.bar-male').data(chartData).enter().append('rect')
+            .attr('x', d => x(d.Male)).attr('y', d => y(d.ageGroup))
+            .attr('width', d => x(0) - x(d.Male)).attr('height', y.bandwidth())
+            .attr('fill', '#4A90E2');
+        
+        svg.selectAll('.bar-female').data(chartData).enter().append('rect')
+            .attr('x', x(0)).attr('y', d => y(d.ageGroup))
+            .attr('width', d => x(d.Female) - x(0)).attr('height', y.bandwidth())
+            .attr('fill', '#E91E63');
+    }
+
+    // ========== ARCGIS MAP ==========
+    const hospitalCoordinates = {
+        "Smith PLC": [-74.0060, 40.7128],
+        "Johnson Inc": [-118.2437, 34.0522],
+        "Williams-Davis": [-87.6298, 41.8781],
+        "Davis, Michael and Sons": [-95.3698, 29.7604],
+        "Brown Group": [-112.0740, 33.4484],
+        "Taylor LLC": [-75.1652, 39.9526],
+        "Anderson-Smith": [-98.4936, 29.4241],
+        "Thomas-Moore": [-117.1611, 32.7157],
+        "Jackson-Scott": [-96.7970, 32.7767],
+        "White and Sons": [-121.8863, 37.3382]
+    };
+
+    function initializeMap() {
+        console.log('🗺️ Initializing ArcGIS map...');
+        
+        if (typeof require === 'undefined') {
+            setTimeout(initializeMap, 500);
+            return;
+        }
+        
+        const hospitalData = aggregateHospitalData(globalData);
+        
+        require(["esri/Map", "esri/views/MapView", "esri/Graphic", "esri/layers/GraphicsLayer"], 
+        function(Map, MapView, Graphic, GraphicsLayer) {
+            const map = new Map({ basemap: "streets-navigation-vector" });
+            const view = new MapView({
+                container: "mapDiv",
+                map: map,
+                center: [-98, 39.5],
+                zoom: 4
+            });
+            
+            const graphicsLayer = new GraphicsLayer();
+            map.add(graphicsLayer);
+            
+            hospitalData.forEach(hospital => {
+                const coords = hospitalCoordinates[hospital.name];
+                if (coords) {
+                    let markerColor = hospital.dominantResult === 'Normal' ? [76, 175, 80] : 
+                                    hospital.dominantResult === 'Abnormal' ? [244, 67, 54] : [255, 152, 0];
+                    
+                    const graphic = new Graphic({
+                        geometry: { type: "point", longitude: coords[0], latitude: coords[1] },
+                        symbol: {
+                            type: "simple-marker",
+                            color: markerColor,
+                            size: Math.min(40, Math.max(12, hospital.patientCount / 10)),
+                            outline: { color: [255, 255, 255], width: 2 }
+                        },
+                        attributes: {
+                            name: hospital.name,
+                            patientCount: hospital.patientCount,
+                            avgBilling: hospital.avgBilling.toFixed(2)
+                        },
+                        popupTemplate: {
+                            title: "🏥 {name}",
+                            content: "<b>Patients:</b> {patientCount}<br/><b>Avg Billing:</b> ${avgBilling}"
+                        }
+                    });
+                    graphicsLayer.add(graphic);
+                }
+            });
+            console.log('✅ Map initialized');
+        });
+    }
+
+    function aggregateHospitalData(data) {
+        const hospitalMap = d3.rollup(data, v => ({
+            patientCount: v.length,
+            avgBilling: d3.mean(v, d => d['Billing Amount']),
+            dominantResult: getDominantTestResult(v)
+        }), d => d.Hospital);
+        
+        const hospitalArray = [];
+        hospitalMap.forEach((stats, name) => {
+            hospitalArray.push({ name: name, ...stats });
+        });
+        return hospitalArray;
+    }
+
+    function getDominantTestResult(patients) {
+        const counts = d3.rollup(patients, v => v.length, d => d['Test Results']);
+        let maxCount = 0, dominant = 'Normal';
+        counts.forEach((count, result) => {
+            if (count > maxCount) {
+                maxCount = count;
+                dominant = result;
+            }
+        });
+        return dominant;
+    }
+
+    // ========== MAIN APP ==========
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Page loaded');
+        document.getElementById('loading').style.display = 'flex';
+        loadData();
+    });
+
+    function loadData() {
+        const csvPath = 'https://raw.githubusercontent.com/prasad22/healthcare-dataset/main/healthcare_dataset.csv';
+        
+        d3.csv(csvPath)
+            .then(function(data) {
+                console.log('✅ Data loaded:', data.length, 'records');
+                globalData = preprocessData(data);
+                filteredData = [...globalData];
+                
+                initializeFilters();
+                updateAllVisualizations();
+                updateStatistics();
+                setTimeout(initializeMap, 1000);
+                
+                document.getElementById('loading').style.display = 'none';
+            })
+            .catch(function(error) {
+                console.error('❌ Error loading data:', error);
+                document.getElementById('loading').style.display = 'none';
+                alert('Failed to load data from GitHub. Please check your internet connection.');
+            });
+    }
+
+    function initializeFilters() {
+        let hospitals = [...new Set(globalData.map(d => d.Hospital))].sort();
+        let hospitalSelect = document.getElementById('hospitalFilter');
+        hospitals.forEach(hospital => {
+            let option = document.createElement('option');
+            option.value = hospital;
+            option.textContent = hospital;
+            hospitalSelect.appendChild(option);
+        });
+        
+        let conditions = [...new Set(globalData.map(d => d['Medical Condition']))].sort();
+        let conditionSelect = document.getElementById('conditionFilter');
+        conditions.forEach(condition => {
+            let option = document.createElement('option');
+            option.value = condition;
+            option.textContent = condition;
+            conditionSelect.appendChild(option);
+        });
+        
+        document.getElementById('hospitalFilter').addEventListener('change', applyFilters);
+        document.getElementById('conditionFilter').addEventListener('change', applyFilters);
+        document.getElementById('testResultFilter').addEventListener('change', applyFilters);
+        document.getElementById('resetBtn').addEventListener('click', resetFilters);
+    }
+
+    function applyFilters() {
+        let hospitalFilter = document.getElementById('hospitalFilter').value;
+        let conditionFilter = document.getElementById('conditionFilter').value;
+        let testResultFilter = document.getElementById('testResultFilter').value;
+        
+        filteredData = globalData.filter(d => {
+            let matchHospital = hospitalFilter === 'all' || d.Hospital === hospitalFilter;
+            let matchCondition = conditionFilter === 'all' || d['Medical Condition'] === conditionFilter;
+            let matchTestResult = testResultFilter === 'all' || d['Test Results'] === testResultFilter;
+            return matchHospital && matchCondition && matchTestResult;
+        });
+        
+        updateAllVisualizations();
+        updateStatistics();
+    }
+
+    function resetFilters() {
+        document.getElementById('hospitalFilter').value = 'all';
+        document.getElementById('conditionFilter').value = 'all';
+        document.getElementById('testResultFilter').value = 'all';
+        filteredData = [...globalData];
+        updateAllVisualizations();
+        updateStatistics();
+    }
+
+    function updateAllVisualizations() {
+        createTestResultsChart(filteredData);
+        createConditionsChart(filteredData);
+        createBillingChart(filteredData);
+        createDemographicsChart(filteredData);
+    }
+
+    function updateStatistics() {
+        document.getElementById('totalPatients').textContent = filteredData.length.toLocaleString();
+        document.getElementById('avgBilling').textContent = '$' + d3.mean(filteredData, d => d['Billing Amount']).toFixed(2);
+        document.getElementById('avgStay').textContent = d3.mean(filteredData, d => d.LengthOfStay).toFixed(1);
+        document.getElementById('totalHospitals').textContent = new Set(filteredData.map(d => d.Hospital)).size;
+    }
+    </script>
+
+    <!-- Load ArcGIS last -->
+    <script src="https://js.arcgis.com/4.28/"></script>
+</body>
 </html>
