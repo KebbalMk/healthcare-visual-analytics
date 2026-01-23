@@ -949,7 +949,7 @@
         document.getElementById('totalPatients').textContent = filteredData.length.toLocaleString();
         
         let avgBilling = d3.mean(filteredData, d => d['Billing Amount']);
-        document.getElementById('avgBilling').textContent = ' + avgBilling.toFixed(2);
+        document.getElementById('avgBilling').textContent = avgBilling.toFixed(2);
         
         let avgStay = d3.mean(filteredData, d => d.LengthOfStay);
         document.getElementById('avgStay').textContent = avgStay.toFixed(1);
@@ -965,4 +965,5 @@
     <script src="https://js.arcgis.com/4.28/"></script>
 </body>
 </html>
+
 
