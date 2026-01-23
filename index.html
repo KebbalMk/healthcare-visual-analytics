@@ -49,7 +49,7 @@
             <p>Interactive analysis of patient data, test results, and hospital statistics</p>
         </header>
         
-        <div class="demo-notice">
+        <div class="demo-notice" style="display: none;">
             <strong>📊 Mode Démonstration</strong> - Données générées automatiquement pour illustration
         </div>
         
@@ -355,15 +355,21 @@
     });
 
     function loadData() {
-        const demoData = generateDemoData();
-        console.log('✅ Data loaded:', demoData.length, 'records');
-        globalData = preprocessData(demoData);
-        filteredData = [...globalData];
-        initializeFilters();
-        updateAllVisualizations();
-        updateStatistics();
-        setTimeout(initializeMap, 1000);
-        document.getElementById('loading').style.display = 'none';
+        const csvPath = 'healthcare_data.csv';
+        d3.csv(csvPath).then(function(data) {
+            console.log('✅ Data loaded:', data.length, 'records');
+            globalData = preprocessData(data);
+            filteredData = [...globalData];
+            initializeFilters();
+            updateAllVisualizations();
+            updateStatistics();
+            setTimeout(initializeMap, 1000);
+            document.getElementById('loading').style.display = 'none';
+        }).catch(function(error) {
+            console.error('❌ Error loading data:', error);
+            document.getElementById('loading').style.display = 'none';
+            alert('Failed to load data. Please check the file path.');
+        });
     }
 
     function initializeFilters() {
