@@ -297,4 +297,106 @@
 
     function aggregateHospitalData(data) {
         const hospitalMap = d3.rollup(data, v => ({ patientCount: v.length, avgBilling: d3.mean(v, d => d['Billing Amount']), avgStay: d3.mean(v, d => d.LengthOfStay),
-            testResults: d3.rollup(v, v2 => v2.length, d => d['Test Results'
+            testResults: d3.rollup(v, v2 => v2.length, d => d['Test Results'<function_calls>
+<invoke name="artifacts">
+<parameter name="command">update</parameter>
+<parameter name="id">standalone_healthcare_dashboard</parameter>
+<parameter name="old_str">            testResults: d3.rollup(v, v2 => v2.length, d => d['Test Results'</parameter>
+<parameter name="new_str">            testResults: d3.rollup(v, v2 => v2.length, d => d['Test Results']), dominantResult: getDominantTestResult(v) }), d => d.Hospital);
+const hospitalArray = [];
+hospitalMap.forEach((stats, name) => { hospitalArray.push({ name: name, ...stats }); });
+return hospitalArray;
+} function getDominantTestResult(patients) {
+    const counts = d3.rollup(patients, v => v.length, d => d['Test Results']);
+    let maxCount = 0, dominant = 'Normal';
+    counts.forEach((count, result) => { if (count > maxCount) { maxCount = count; dominant = result; } });
+    return dominant;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Page loaded');
+    document.getElementById('loading').style.display = 'flex';
+    loadData();
+});
+
+function loadData() {
+    const csvPath = 'healthcare_data.csv';
+    d3.csv(csvPath).then(function(data) {
+        console.log('✅ Data loaded:', data.length, 'records');
+        globalData = preprocessData(data);
+        filteredData = [...globalData];
+        initializeFilters();
+        updateAllVisualizations();
+        updateStatistics();
+        setTimeout(initializeMap, 1000);
+        document.getElementById('loading').style.display = 'none';
+    }).catch(function(error) {
+        console.error('❌ Error loading data:', error);
+        document.getElementById('loading').style.display = 'none';
+        alert('Failed to load data. Please check the file path.');
+    });
+}
+
+function initializeFilters() {
+    let hospitals = [...new Set(globalData.map(d => d.Hospital))].sort();
+    let hospitalSelect = document.getElementById('hospitalFilter');
+    hospitals.forEach(hospital => {
+        let option = document.createElement('option');
+        option.value = hospital;
+        option.textContent = hospital;
+        hospitalSelect.appendChild(option);
+    });
+    let conditions = [...new Set(globalData.map(d => d['Medical Condition']))].sort();
+    let conditionSelect = document.getElementById('conditionFilter');
+    conditions.forEach(condition => {
+        let option = document.createElement('option');
+        option.value = condition;
+        option.textContent = condition;
+        conditionSelect.appendChild(option);
+    });
+    document.getElementById('hospitalFilter').addEventListener('change', applyFilters);
+    document.getElementById('conditionFilter').addEventListener('change', applyFilters);
+    document.getElementById('testResultFilter').addEventListener('change', applyFilters);
+    document.getElementById('resetBtn').addEventListener('click', resetFilters);
+}
+
+function applyFilters() {
+    let hospitalFilter = document.getElementById('hospitalFilter').value;
+    let conditionFilter = document.getElementById('conditionFilter').value;
+    let testResultFilter = document.getElementById('testResultFilter').value;
+    filteredData = globalData.filter(d => {
+        let matchHospital = hospitalFilter === 'all' || d.Hospital === hospitalFilter;
+        let matchCondition = conditionFilter === 'all' || d['Medical Condition'] === conditionFilter;
+        let matchTestResult = testResultFilter === 'all' || d['Test Results'] === testResultFilter;
+        return matchHospital && matchCondition && matchTestResult;
+    });
+    updateAllVisualizations();
+    updateStatistics();
+}
+
+function resetFilters() {
+    document.getElementById('hospitalFilter').value = 'all';
+    document.getElementById('conditionFilter').value = 'all';
+    document.getElementById('testResultFilter').value = 'all';
+    filteredData = [...globalData];
+    updateAllVisualizations();
+    updateStatistics();
+}
+
+function updateAllVisualizations() {
+    createTestResultsChart(filteredData);
+    createConditionsChart(filteredData);
+    createBillingChart(filteredData);
+    createDemographicsChart(filteredData);
+}
+
+function updateStatistics() {
+    document.getElementById('totalPatients').textContent = filteredData.length.toLocaleString();
+    document.getElementById('avgBilling').textContent = '$' + d3.mean(filteredData, d => d['Billing Amount']).toFixed(2);
+    document.getElementById('avgStay').textContent = d3.mean(filteredData, d => d.LengthOfStay).toFixed(1);
+    document.getElementById('totalHospitals').textContent = new Set(filteredData.map(d => d.Hospital)).size;
+}
+</script>
+<script src="https://js.arcgis.com/4.28/"></script> </body>
+</html></parameter>
+
